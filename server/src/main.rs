@@ -5,7 +5,8 @@ use tokio::{
 };
 
 #[tokio::main]
-async fn main() {
+async fn main() 
+{
   // IMPORTANT: .unwrap() is used here for learning. Use of .unwrap() throws a panic.
   // Error handling should use ? operator (ex: .await? ). 
   // Use of ? requires a Result<()> to be returned
@@ -15,7 +16,7 @@ async fn main() {
   let listener = TcpListener::bind("localhost:8080").await.unwrap();
 
   // setup a broadcast channel to allow producers and consumers to share between each other
-  let (tx, mut rx) = broadcast::channel::<String>(10);
+  let (tx, _rx) = broadcast::channel::<String>(10);
 
   loop 
   {
@@ -27,35 +28,41 @@ async fn main() {
 
     // tokio::spawn creates a seperate concurent task for each connection
     // read tokio docs if you wish to know more 
-    tokio::spawn(async move {
+    tokio::spawn(async move 
+    {
       // here we split the io read/write portions of the stream
       // otherwise, reader:BufReader would have ownership of the entire socket
       let (reader, mut writer) = socket.split();
 
       // assign reader:ReadHalf to a mutable BufReader
       let mut reader = BufReader::new(reader);
-      
       // create a String for storing the stream of bytes
       // tokio BufReader can read text line by line from a stream
       let mut line = String::new();
 
       loop 
       {
-        let bytes_read = reader.read_line(&mut line).await.unwrap();
-        if bytes_read == 0 // if we have 0 bytes incoming we have reached the end of the file 
-        {
-          break;
-        }
+          tokio::select! 
+          {
+            result = reader.read_line(&mut line) => 
+            {
+              if result.unwrap() == 0 
+              { // if we have 0 bytes incoming we have reached the end of the file 
+                break;
+              }
 
-        tx.send(line.clone()).unwrap();
-
-        let msg = rx.recv().await.unwrap();
-
-        writer.write_all(msg.as_bytes()).await.unwrap();
-        // line.clear() clears variable 'line'. read_line appends the next stream line
-        // to whatever has comes through. We must clear the string outselves.
-        // There is a practical reason to keep this (ex: reading in a file line by line)
-        line.clear()
+              tx.send(line.clone()).unwrap();
+              // line.clear() clears variable 'line'. read_line appends the next stream line
+              // to whatever has comes through. We must clear the string outselves.
+              // There is a practical reason to keep this (ex: reading in a file line by line)
+              line.clear();
+            }
+            result = rx.recv() => 
+            {
+              let msg = result.unwrap();
+              writer.write_all(msg.as_bytes()).await.unwrap();
+            }
+          }
       }
     });
   }
