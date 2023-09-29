@@ -1,6 +1,7 @@
 use tokio::{
     io::{AsyncWriteExt, BufReader, AsyncBufReadExt,},
     net::TcpListener,
+    sync::broadcast,
 };
 
 #[tokio::main]
@@ -13,10 +14,16 @@ async fn main() {
   // setup a tokio socket listener
   let listener = TcpListener::bind("localhost:8080").await.unwrap();
 
+  // setup a broadcast channel to allow producers and consumers to share between each other
+  let (tx, mut rx) = broadcast::channel::<String>(10);
+
   loop 
   {
     // assign the listener to a socket and address. _ <- underscore ignores warnings, errors, for now (like in Go)
     let (mut socket, _addr) = listener.accept().await.unwrap();
+
+    let tx = tx.clone();
+    let mut rx = tx.subscribe();
 
     // tokio::spawn creates a seperate concurent task for each connection
     // read tokio docs if you wish to know more 
@@ -39,7 +46,12 @@ async fn main() {
         {
           break;
         }
-        writer.write_all(line.as_bytes()).await.unwrap();
+
+        tx.send(line.clone()).unwrap();
+
+        let msg = rx.recv().await.unwrap();
+
+        writer.write_all(msg.as_bytes()).await.unwrap();
         // line.clear() clears variable 'line'. read_line appends the next stream line
         // to whatever has comes through. We must clear the string outselves.
         // There is a practical reason to keep this (ex: reading in a file line by line)
