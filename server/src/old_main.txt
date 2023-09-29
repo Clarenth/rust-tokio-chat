@@ -1,0 +1,11 @@
+/* 
+  old code. We were managing the buffer size and truncating it ourselves. 
+  We are now using Tokio helpers in new code above ^. 
+  // buffer size is unsigned eight bytes
+  let mut buffer = [0u8; 1024];
+
+  let bytes_read = socket.read(&mut buffer).await.unwrap();
+
+  // write all that comes from the buffer using .. <- expression for 'exclusive range'
+  socket.write_all(&buffer[..bytes_read]).await.unwrap();
+*/
